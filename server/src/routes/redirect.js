@@ -1,0 +1,32 @@
+import { Router } from 'express';
+import prisma from '../lib/prisma.js';
+import redis from '../lib/redis.js';
+
+const router = Router();
+
+router.get('/:code', async (req, res) => {
+  const { code } = req.params;
+
+  let originalUrl = await redis.get(code);
+
+  if (!originalUrl) {
+    const link = await prisma.shortLink.findUnique({ where: { shortCode: code } });
+    if (!link) return res.status(404).send('Link not found');
+    originalUrl = link.originalUrl;
+    await redis.set(code, originalUrl);
+  }
+
+  prisma.shortLink
+    .findUnique({ where: { shortCode: code } })
+    .then((link) => {
+      if (link) {
+        prisma.clickEvent.create({
+          data: { shortLinkId: link.id, referrer: req.headers.referer || '' },
+        });
+      }
+    });
+
+  res.redirect(302, originalUrl);
+});
+
+export default router;
