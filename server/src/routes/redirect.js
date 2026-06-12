@@ -16,17 +16,19 @@ router.get('/:code', async (req, res) => {
     await redis.set(code, originalUrl);
   }
 
-  prisma.shortLink
-    .findUnique({ where: { shortCode: code } })
-    .then((link) => {
-      if (link) {
-        prisma.clickEvent.create({
-          data: { shortLinkId: link.id, referrer: req.headers.referer || '' },
-        });
-      }
-    });
-
   res.redirect(302, originalUrl);
+
+  // Log click after redirect is sent
+  try {
+    const link = await prisma.shortLink.findUnique({ where: { shortCode: code } });
+    if (link) {
+      await prisma.clickEvent.create({
+        data: { shortLinkId: link.id, referrer: req.headers.referer || '' },
+      });
+    }
+  } catch (err) {
+    console.error('Click logging failed:', err.message);
+  }
 });
 
 export default router;
